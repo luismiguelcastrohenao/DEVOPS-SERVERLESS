@@ -134,7 +134,7 @@ resource "aws_iam_role_policy_attachment" "delete_logs" {
 }
 
 ##########################################################
-# Políticas inline por Lambda
+# Políticas inline por Lambda:
 ##########################################################
 
 # 4. Política para getBlogsLambda (GetItem)
