@@ -22,9 +22,9 @@ steps:
 
 # 3. Empaquetar cada función Lambda en ZIP - Crea archivos .zip a partir de tus funciones Lambda para subirlos a AWS
 - script: |
-    zip -j lambda_get.zip   lambda/lambda_get.mjs
-    zip -j lambda_post.zip  lambda/lambda_post.mjs
-    zip -j lambda_delete.zip lambda/lambda_delete.mjs
+    zip -j lambda_get.zip   .iac/lambda/lambda_get.mjs
+    zip -j lambda_post.zip  .iaclambda/lambda_post.mjs
+    zip -j lambda_delete.zip .iac/lambda/lambda_delete.mjs
   displayName: "Crear ZIPs de Lambdas"
 
 # 4. Actualizar código de las Lambdas - Actualiza las funciones Lambda en AWS con el nuevo código comprimido
