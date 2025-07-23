@@ -1,0 +1,91 @@
+trigger:
+  - main
+
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: "AWS"    # Contiene AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY
+
+steps:
+# 1. Checkout - Clona tu repositorio dentro del entorno de CI para trabajar con el código fuente
+- checkout: self
+  displayName: "Checkout del repositorio"
+
+# 2. Instalar AWS CLI v2 - Descarga e instala AWS CLI v2, necesaria para interactuar con servicios de AWS
+- script: |
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip awscliv2.zip
+    sudo ./aws/install --update
+  displayName: "Instalar AWS CLI v2"
+
+# 3. Empaquetar cada función Lambda en ZIP - Crea archivos .zip a partir de tus funciones Lambda para subirlos a AWS
+- script: |
+    zip -j lambda_get.zip   .iac/lambda/lambda_get.mjs
+    zip -j lambda_post.zip  .iac/lambda/lambda_post.mjs
+    zip -j lambda_delete.zip .iac/lambda/lambda_delete.mjs
+  displayName: "Crear ZIPs de Lambdas"
+
+# 4. Actualizar código de las Lambdas - Actualiza las funciones Lambda en AWS con el nuevo código comprimido
+ # y Usa las credenciales definidas en el grupo de variables AWS
+- script: |
+    aws lambda update-function-code \
+      --function-name getBlogsLambda \
+      --zip-file fileb://lambda_get.zip \
+      --region us-east-2
+
+    aws lambda update-function-code \
+      --function-name postBlogsLambda \
+      --zip-file fileb://lambda_post.zip \
+      --region us-east-2
+
+    aws lambda update-function-code \
+      --function-name deleteBlogsLambda \
+      --zip-file fileb://lambda_delete.zip \
+      --region us-east-2
+  env:
+    AWS_ACCESS_KEY_ID:     $(AWS_ACCESS_KEY_ID)
+    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+  displayName: "Actualizar Lambdas en AWS"
+
+# 5. Instalar Terraform - Instala la última versión de Terraform para poder aplicar la infraestructura como código
+- task: TerraformInstaller@1
+  displayName: "Instalar Terraform"
+  inputs:
+    terraformVersion: 'latest'
+
+# 6. Terraform Init (S3 backend) - Inicializa Terraform con un backend remoto (S3)
+- task: TerraformTaskV4@4
+  displayName: "Terraform Init"
+  inputs:
+    provider: 'aws'
+    command: 'init'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
+    backendServiceAWS: 'aws_terraform'
+    backendAWSBucketName: 'luism-tf-states'
+    backendAWSKey: 'serverless-app/terraform.tfstate'    # indica la “ruta” del archivo .tfstate dentro del bucket
+    backendAWSRegion: 'us-east-2'
+
+# 7. Terraform Plan
+- task: TerraformTaskV4@4
+  displayName: "Terraform Plan"
+  inputs:
+    provider: 'aws'
+    command: 'plan'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
+    environmentServiceNameAWS: 'aws_terraform'
+
+# 8. Terraform Apply (solo en main) Evita cambios de infraestructura en ramas de prueba
+  # $ {{ ... }}es una expresión de tiempo de compilación (compile-time expression)
+  # if eq(...): es una condición. En este caso, compara si el nombre de la rama (Build.SourceBranchName) es igual a 'main'
+- ${{ if eq( variables['Build.SourceBranchName'], 'main') }}:   #
+  - task: TerraformTaskV4@4
+    displayName: "Terraform Apply"
+    inputs:
+      provider: 'aws'
+      command: 'apply'
+      commandOptions: '-auto-approve'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
+      environmentServiceNameAWS: 'aws_terraform'
+
