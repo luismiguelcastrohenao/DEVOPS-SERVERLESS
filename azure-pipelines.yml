@@ -1,6 +1,7 @@
 trigger:
   - main
 
+
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -16,7 +17,7 @@ steps:
 - script: |
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip awscliv2.zip
-    sudo ./aws/install
+    sudo ./aws/install --update
   displayName: "Instalar AWS CLI v2"
 
 # 3. Empaquetar cada función Lambda en ZIP - Crea archivos .zip a partir de tus funciones Lambda para subirlos a AWS
