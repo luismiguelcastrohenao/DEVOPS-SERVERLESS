@@ -5,43 +5,31 @@ const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
 export const handler = async (event) => {
+  const blog_id = Number(event.pathParameters.blog_id);
+
+  if (!blog_id) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Falta el parámetro blog_id" }),
+    };
+  }
+
   const command = new DeleteCommand({
     TableName: process.env.TABLE_NAME || "blogs-dev",
-    Key: {
-      blog_id : event.blog_id,
-    },
+    Key: { blog_id },
   });
+
   try {
-    const response = await docClient.send(command);
-    console.log(response);
-    return "Successfully deleted item!";
+    await docClient.send(command);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: `Blog con ID ${blog_id} eliminado correctamente` }),
+    };
   } catch (err) {
-    return { error: err }
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Error al eliminar", detalle: err.message }),
+    };
   }
 };
-
-
-
-
-
-// // deleteBlogsLambda
-
-// const AWS = require('aws-sdk');
-// const docClient = new AWS.DynamoDB.DocumentClient();
-
-// var params = {
-//   TableName: process.env.TABLE_NAME || "blogs-dev",
-//   Key: {
-//     "blog_id": 1
-//   },
-//   ReturnValues: "ALL_OLD"
-// }
-
-// exports.handler = async (event, context) => {
-//   try {
-//     const data = await docClient.delete(params).promise()
-//     return { body: JSON.stringify(data) }
-//   } catch (err) {
-//     return { error: err }
-//   }
-// }

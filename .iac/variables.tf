@@ -9,3 +9,11 @@
 #   type        = string
 #   default     = "messagesApp"
 # }
+
+variable "myregion" {
+  default = "us-east-2"
+}
+
+variable "accountId" {
+  description = "AWS account ID"
+}
