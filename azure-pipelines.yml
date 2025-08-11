@@ -95,7 +95,7 @@ steps:
     command: 'plan'
     workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
     environmentServiceNameAWS: 'aws_terraform'
-    commandOptions: '-out=tfplan -input=false'
+    commandOptions: '-out=tfplan -input=false -var-file=terraform.tfvars'
 
 # 8. Terraform Apply (solo en main) Evita cambios de infraestructura en ramas de prueba
   # $ {{ ... }}es una expresión de tiempo de compilación (compile-time expression)
@@ -106,7 +106,7 @@ steps:
     inputs:
       provider: 'aws'
       command: 'apply'
-      commandOptions: '-auto-approve tfplan'
+      commandOptions: '-auto-approve tfplan -var-file=terraform.tfvars'
       workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
       environmentServiceNameAWS: 'aws_terraform'
 
