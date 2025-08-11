@@ -21,6 +21,7 @@ steps:
   displayName: "Instalar AWS CLI v2"
 
 # 3. Empaquetar cada función Lambda en ZIP - Crea archivos .zip a partir de tus funciones Lambda para subirlos a AWS
+     # (.mjs -> .zip)
 - script: |
     zip -j lambda_get.zip   .iac/lambda/lambda_get.mjs
     zip -j lambda_post.zip  .iac/lambda/lambda_post.mjs
@@ -29,25 +30,44 @@ steps:
 
 # 4. Actualizar código de las Lambdas - Actualiza las funciones Lambda en AWS con el nuevo código comprimido
  # y Usa las credenciales definidas en el grupo de variables AWS
-- script: |
-    aws lambda update-function-code \
-      --function-name getBlogsLambda \
-      --zip-file fileb://lambda_get.zip \
-      --region us-east-2
+#- script: |
+#    aws lambda update-function-code \
+#      --function-name getBlogsLambda \
+#      --zip-file fileb://lambda_get.zip \
+#      --region us-east-2
 
-    aws lambda update-function-code \
-      --function-name postBlogsLambda \
-      --zip-file fileb://lambda_post.zip \
-      --region us-east-2
+#    aws lambda update-function-code \
+#      --function-name postBlogsLambda \
+#      --zip-file fileb://lambda_post.zip \
+#      --region us-east-2
 
-    aws lambda update-function-code \
-      --function-name deleteBlogsLambda \
-      --zip-file fileb://lambda_delete.zip \
-      --region us-east-2
-  env:
-    AWS_ACCESS_KEY_ID:     $(AWS_ACCESS_KEY_ID)
-    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-  displayName: "Actualizar Lambdas en AWS"
+#    aws lambda update-function-code \
+#      --function-name deleteBlogsLambda \
+#      --zip-file fileb://lambda_delete.zip \
+#      --region us-east-2
+#  env:
+#    AWS_ACCESS_KEY_ID:     $(AWS_ACCESS_KEY_ID)
+#    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+#  displayName: "Actualizar Lambdas en AWS"
+
+# 4. Publicar los zips como artifacts (para usarlos después)
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Build.SourcesDirectory)/lambda_get.zip'
+    artifact: 'lambda_get_zip'
+  displayName: 'Publish lambda_get.zip'
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Build.SourcesDirectory)/lambda_post.zip'
+    artifact: 'lambda_post_zip'
+  displayName: 'Publish lambda_post.zip'
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Build.SourcesDirectory)/lambda_delete.zip'
+    artifact: 'lambda_delete_zip'
+  displayName: 'Publish lambda_delete.zip'
 
 # 5. Instalar Terraform - Instala la última versión de Terraform para poder aplicar la infraestructura como código
 - task: TerraformInstaller@1
@@ -75,6 +95,7 @@ steps:
     command: 'plan'
     workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
     environmentServiceNameAWS: 'aws_terraform'
+    commandOptions: '-out=tfplan -input=false'
 
 # 8. Terraform Apply (solo en main) Evita cambios de infraestructura en ramas de prueba
   # $ {{ ... }}es una expresión de tiempo de compilación (compile-time expression)
@@ -85,7 +106,68 @@ steps:
     inputs:
       provider: 'aws'
       command: 'apply'
-      commandOptions: '-auto-approve'
+      commandOptions: '-auto-approve tfplan'
       workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
       environmentServiceNameAWS: 'aws_terraform'
 
+# 8. Update Lambda Code (solo en main, después de apply)
+# Descarga artifacts y ejecuta aws lambda update-function-code
+- ${{ if eq( variables['Build.SourceBranchName'], 'main') }}:
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      artifact: 'lambda_get_zip'
+      patterns: '**/lambda_get.zip'
+      path: '$(Pipeline.Workspace)/artifacts/lambda_get'
+    displayName: 'Download lambda_get_zip'
+
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      artifact: 'lambda_post_zip'
+      patterns: '**/lambda_post.zip'
+      path: '$(Pipeline.Workspace)/artifacts/lambda_post'
+    displayName: 'Download lambda_post_zip'
+
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      artifact: 'lambda_delete_zip'
+      patterns: '**/lambda_delete.zip'
+      path: '$(Pipeline.Workspace)/artifacts/lambda_delete'
+    displayName: 'Download lambda_delete_zip'
+
+- script: |
+      set -e
+      # localizar zips (ruta variará según agente)
+      GET_ZIP="$(Pipeline.Workspace)/artifacts/lambda_get/lambda_get.zip"
+      POST_ZIP="$(Pipeline.Workspace)/artifacts/lambda_post/lambda_post.zip"
+      DELETE_ZIP="$(Pipeline.Workspace)/artifacts/lambda_delete/lambda_delete.zip"
+
+      # fallback: buscar si no están en la ruta esperada
+      if [ ! -f "$GET_ZIP" ]; then GET_ZIP=$(find $(Pipeline.Workspace)/artifacts -type f -name 'lambda_get.zip' | head -n1); fi
+      if [ ! -f "$POST_ZIP" ]; then POST_ZIP=$(find $(Pipeline.Workspace)/artifacts -type f -name 'lambda_post.zip' | head -n1); fi
+      if [ ! -f "$DELETE_ZIP" ]; then DELETE_ZIP=$(find $(Pipeline.Workspace)/artifacts -type f -name 'lambda_delete.zip' | head -n1); fi
+
+      echo "Using GET_ZIP: $GET_ZIP"
+      echo "Using POST_ZIP: $POST_ZIP"
+      echo "Using DELETE_ZIP: $DELETE_ZIP"
+
+      echo "Actualizando funciones Lambda..."
+      aws lambda update-function-code \
+        --function-name getBlogsLambda \
+        --zip-file fileb://"$GET_ZIP" \
+        --region $(AWS_REGION)
+
+      aws lambda update-function-code \
+        --function-name postBlogsLambda \
+        --zip-file fileb://"$POST_ZIP" \
+        --region $(AWS_REGION)
+
+      aws lambda update-function-code \
+        --function-name deleteBlogsLambda \
+        --zip-file fileb://"$DELETE_ZIP" \
+        --region $(AWS_REGION)
+
+      echo "Actualización de Lambdas completada."
+  displayName: 'Actualizar Lambdas en AWS'
+  env:
+      AWS_ACCESS_KEY_ID:     $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
