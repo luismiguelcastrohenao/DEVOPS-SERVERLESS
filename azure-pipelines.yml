@@ -111,7 +111,7 @@ steps:
     inputs:
       provider: 'aws'
       command: 'apply'
-      commandOptions: '-auto-approve tfplan -var-file=terraform.tfvars'
+      commandOptions: '-auto-approve tfplan'
       workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
       environmentServiceNameAWS: 'aws_terraform'
 
