@@ -75,7 +75,12 @@ steps:
   inputs:
     terraformVersion: 'latest'
 
-# 6. Terraform Init (S3 backend) - Inicializa Terraform con un backend remoto (S3)
+# 6. Generar terraform.tfvars dinámicamente antes de terraform init/plan/apply
+- script: |
+    echo "accountId = \"$(accountId)\"" > $(System.DefaultWorkingDirectory)/.iac/terraform.tfvars
+  displayName: "Generar terraform.tfvars dinámico"
+
+# 7. Terraform Init (S3 backend) - Inicializa Terraform con un backend remoto (S3)
 - task: TerraformTaskV4@4
   displayName: "Terraform Init"
   inputs:
@@ -87,7 +92,7 @@ steps:
     backendAWSKey: 'serverless-app/terraform.tfstate'    # indica la “ruta” del archivo .tfstate dentro del bucket
     backendAWSRegion: 'us-east-2'
 
-# 7. Terraform Plan
+# 8. Terraform Plan
 - task: TerraformTaskV4@4
   displayName: "Terraform Plan"
   inputs:
@@ -97,7 +102,7 @@ steps:
     environmentServiceNameAWS: 'aws_terraform'
     commandOptions: '-out=tfplan -input=false -var-file=terraform.tfvars'
 
-# 8. Terraform Apply (solo en main) Evita cambios de infraestructura en ramas de prueba
+# 9. Terraform Apply (solo en main) Evita cambios de infraestructura en ramas de prueba
   # $ {{ ... }}es una expresión de tiempo de compilación (compile-time expression)
   # if eq(...): es una condición. En este caso, compara si el nombre de la rama (Build.SourceBranchName) es igual a 'main'
 - ${{ if eq( variables['Build.SourceBranchName'], 'main') }}:   #
@@ -110,7 +115,7 @@ steps:
       workingDirectory: '$(System.DefaultWorkingDirectory)/.iac'
       environmentServiceNameAWS: 'aws_terraform'
 
-# 8. Update Lambda Code (solo en main, después de apply)
+# 10. Update Lambda Code (solo en main, después de apply)
 # Descarga artifacts y ejecuta aws lambda update-function-code
 - ${{ if eq( variables['Build.SourceBranchName'], 'main') }}:
   - task: DownloadPipelineArtifact@2
